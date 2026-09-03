@@ -5,7 +5,7 @@ from delivery.models import UserProfile
 
 
 class Command(BaseCommand):
-    help = "Creates demo accounts for retailer/dispatcher/rider so the panel can log in immediately."
+    help = "Creates demo accounts (and an admin superuser) so the panel can log in immediately, without needing shell access."
 
     def handle(self, *args, **options):
         demo_users = [
@@ -23,4 +23,19 @@ class Command(BaseCommand):
             status = "created" if created else "already existed"
             self.stdout.write(self.style.SUCCESS(f"{username} ({role}) - {status}"))
 
-        self.stdout.write(self.style.SUCCESS("\nDemo login — password for all: reflex2026"))
+        # Shell access isn't available on Render's free tier, so we create the
+        # admin superuser here too instead of via `createsuperuser` interactively.
+        admin, created = User.objects.get_or_create(username="admin")
+        if created:
+            admin.set_password("reflexAdmin2026")
+            admin.is_staff = True
+            admin.is_superuser = True
+            admin.save()
+            self.stdout.write(self.style.SUCCESS("admin (superuser) - created"))
+        else:
+            self.stdout.write(self.style.SUCCESS("admin (superuser) - already existed"))
+
+        self.stdout.write(self.style.SUCCESS(
+            "\nDemo login — password for all demo users: reflex2026"
+            "\nAdmin login — username: admin, password: reflexAdmin2026"
+        ))

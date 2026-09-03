@@ -8,7 +8,7 @@ services:
     runtime: python
     plan: free
     buildCommand: "pip install -r requirements.txt && python manage.py collectstatic --noinput"
-    startCommand: "python manage.py migrate && gunicorn reflex_project.wsgi --log-file -"
+    startCommand: "python manage.py migrate && python manage.py seed_demo && gunicorn reflex_project.wsgi --log-file -"
     envVars:
       - key: SECRET_KEY
         generateValue: true
