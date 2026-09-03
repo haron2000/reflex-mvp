@@ -1,0 +1,70 @@
+{% extends "delivery/base.html" %}
+{% block title %} · Dispatcher{% endblock %}
+{% block content %}
+
+<p class="text-sm text-gray-500 mb-2">All deliveries</p>
+<div id="list" class="flex flex-col gap-3"></div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let riders = [];
+
+async function refresh() {
+  const [items, riderList] = await Promise.all([
+    apiFetch('/api/requests/'),
+    apiFetch('/api/riders/'),
+  ]);
+  riders = riderList;
+  const list = document.getElementById('list');
+
+  if (items.length === 0) {
+    list.innerHTML = '<p class="text-sm text-gray-400">No deliveries yet.</p>';
+    return;
+  }
+
+  list.innerHTML = items.map(d => `
+    <div class="bg-white border border-gray-200 rounded-xl p-4">
+      <div class="flex justify-between items-center mb-1">
+        <span class="font-medium text-sm">#${d.id} · ${d.customer_name}</span>
+        ${statusBadge(d.status)}
+      </div>
+      <p class="text-sm text-gray-500 mb-2">${d.item_description}</p>
+      ${d.status === 'REQUESTED' ? `
+        <div class="flex gap-2 items-center">
+          <select id="rider-${d.id}" class="border border-gray-300 rounded-lg px-2 py-1.5 text-sm flex-1">
+            ${riders.map(r => `<option value="${r.id}">${r.username}</option>`).join('')}
+          </select>
+          <button data-assign="${d.id}" data-version="${d.version}" class="bg-gray-900 text-white rounded-lg px-3 py-1.5 text-sm font-medium">Assign</button>
+        </div>
+      ` : `<p class="text-xs text-gray-400">Rider: ${d.assigned_rider_name || '—'}</p>`}
+      <p id="err-${d.id}" class="text-xs text-red-600 mt-2 hidden"></p>
+    </div>
+  `).join('');
+
+  list.querySelectorAll('[data-assign]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.assign;
+      const version = parseInt(btn.dataset.version);
+      const riderId = parseInt(document.getElementById(`rider-${id}`).value);
+      const errEl = document.getElementById(`err-${id}`);
+      try {
+        await apiFetch(`/api/requests/${id}/assign/`, {
+          method: 'POST',
+          body: JSON.stringify({rider_id: riderId, version}),
+        });
+        errEl.classList.add('hidden');
+        refresh();
+      } catch (e) {
+        errEl.textContent = e.message;
+        errEl.classList.remove('hidden');
+      }
+    });
+  });
+}
+
+refresh();
+setInterval(refresh, 5000);
+</script>
+{% endblock %}

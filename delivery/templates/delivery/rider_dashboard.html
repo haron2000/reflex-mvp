@@ -1,0 +1,110 @@
+{% extends "delivery/base.html" %}
+{% block title %} · Rider{% endblock %}
+{% block content %}
+
+<p class="text-sm text-gray-500 mb-2">Your assigned deliveries</p>
+<div id="list" class="flex flex-col gap-3"></div>
+
+<!-- Scan modal -->
+<div id="scan-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-xl p-4 w-full max-w-sm">
+    <div class="flex justify-between items-center mb-3">
+      <span class="font-medium text-sm" id="scan-title">Scan to confirm</span>
+      <button id="scan-close" class="text-gray-400 text-sm">Close</button>
+    </div>
+    <div id="qr-reader" style="width: 100%;"></div>
+    <p class="text-xs text-gray-400 my-2 text-center">or type the code shown on the package</p>
+    <div class="flex gap-2">
+      <input id="manual-code" placeholder="Paste code" class="border border-gray-300 rounded-lg px-3 py-2 text-sm flex-1">
+      <button id="manual-submit" class="bg-gray-900 text-white rounded-lg px-3 py-2 text-sm font-medium">Confirm</button>
+    </div>
+    <p id="scan-error" class="text-sm text-red-600 mt-2 hidden"></p>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<script>
+let deliveries = [];
+let scanner = null;
+let activeVersion = null;
+
+async function refresh() {
+  deliveries = await apiFetch('/api/requests/');
+  const list = document.getElementById('list');
+  if (deliveries.length === 0) {
+    list.innerHTML = '<p class="text-sm text-gray-400">No active deliveries assigned to you.</p>';
+    return;
+  }
+  list.innerHTML = deliveries.map(d => {
+    const label = d.status === 'ASSIGNED' ? 'Scan to confirm pickup' : (d.status === 'PICKED_UP' ? 'Scan to confirm delivery' : null);
+    return `
+    <div class="bg-white border border-gray-200 rounded-xl p-4">
+      <div class="flex justify-between items-center mb-1">
+        <span class="font-medium text-sm">#${d.id} · ${d.customer_name}</span>
+        ${statusBadge(d.status)}
+      </div>
+      <p class="text-sm text-gray-500 mb-1">${d.item_description}</p>
+      <p class="text-xs text-gray-400 mb-2">${d.customer_address}</p>
+      ${label ? `<button data-scan="${d.id}" class="bg-gray-900 text-white rounded-lg px-3 py-1.5 text-sm font-medium">${label}</button>` : ''}
+    </div>`;
+  }).join('');
+
+  list.querySelectorAll('[data-scan]').forEach(btn => {
+    btn.addEventListener('click', () => openScanModal(parseInt(btn.dataset.scan)));
+  });
+}
+
+function openScanModal(deliveryId) {
+  const d = deliveries.find(x => x.id === deliveryId);
+  activeVersion = d.version;
+  document.getElementById('scan-title').textContent = `Confirm #${d.id} · ${d.customer_name}`;
+  document.getElementById('scan-error').classList.add('hidden');
+  document.getElementById('manual-code').value = '';
+  document.getElementById('scan-modal').classList.remove('hidden');
+
+  scanner = new Html5Qrcode('qr-reader');
+  scanner.start({ facingMode: 'environment' }, { fps: 10, qrbox: 200 },
+    (decodedText) => submitScan(decodedText),
+    () => {} // ignore per-frame scan misses
+  ).catch(() => {
+    // camera unavailable -- manual entry below still works
+  });
+}
+
+function closeScanModal() {
+  document.getElementById('scan-modal').classList.add('hidden');
+  if (scanner) {
+    scanner.stop().catch(() => {});
+    scanner = null;
+  }
+}
+
+async function submitScan(qrToken) {
+  const errEl = document.getElementById('scan-error');
+  try {
+    await apiFetch('/api/scan/', {
+      method: 'POST',
+      body: JSON.stringify({qr_token: qrToken, version: activeVersion}),
+    });
+    closeScanModal();
+    refresh();
+  } catch (e) {
+    errEl.textContent = e.message;
+    errEl.classList.remove('hidden');
+  }
+}
+
+document.getElementById('scan-close').addEventListener('click', closeScanModal);
+document.getElementById('manual-submit').addEventListener('click', () => {
+  const code = document.getElementById('manual-code').value.trim();
+  if (!code) return;
+  submitScan(code);
+});
+
+refresh();
+setInterval(refresh, 5000);
+</script>
+{% endblock %}

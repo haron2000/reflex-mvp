@@ -1,0 +1,18 @@
+{% extends "delivery/base.html" %}
+{% block title %} · Log in{% endblock %}
+{% block content %}
+<div class="max-w-sm mx-auto mt-16 bg-white border border-gray-200 rounded-xl p-6">
+  <h1 class="text-lg font-medium mb-4">Log in to Reflex</h1>
+  {% if form.errors %}
+    <p class="text-sm text-red-600 mb-3">Incorrect username or password.</p>
+  {% endif %}
+  <form method="post" class="flex flex-col gap-3">
+    {% csrf_token %}
+    <input type="text" name="username" placeholder="Username" required
+           class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+    <input type="password" name="password" placeholder="Password" required
+           class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+    <button type="submit" class="bg-gray-900 text-white rounded-lg py-2 text-sm font-medium">Log in</button>
+  </form>
+</div>
+{% endblock %}
